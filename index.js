@@ -1,90 +1,83 @@
-const express=require("express")
-const app=express()
+const express = require("express");
+const path = require("path");
+const http = require("http");
+const {Server} = require("socket.io");
 
-const path=require("path")
-const http=require("http")
-const {Server}=require("socket.io")
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
+app.use(express.static(path.resolve("")));
 
-const server=http.createServer(app)
+let arr = [];
+let playingArray = [];
 
-const io=new Server(server)
-app.use(express.static(path.resolve("")))
+io.on("connection", (socket) => {
 
-let arr=[]
-let playingArray=[]
+    //grasz klika "graj"
 
-io.on("connection",(socket)=>{
+    socket.on("find", (e) => {
 
-    socket.on("find",(e)=>{
+        if (!e.name) return;
 
-        if(e.name!=null){
+      socket.playerName = e.name;
+        arr.push(e.name);
 
-            arr.push(e.name)
+        if (arr.length >= 2){
 
-            if(arr.length>=2){
-                let p1obj={
-                    p1name:arr[0],
-                    p1value:"X",
-                    p1move:""
-                }
-                let p2obj={
-                    p2name:arr[1],
-                    p2value:"O",
-                    p2move:""
-                }
+            const p1obj = { p1name: arr[0], p1value: "X", p1move: "" };
+            const p2obj = { p2name: arr[1], p2value: "O", p2move: "" };
 
-                let obj={
-                    p1:p1obj,
-                    p2:p2obj,
-                    sum:0
-                }
-                playingArray.push(obj)
+            playingArray.push({ p1: p1obj, p2: p2obj, sum: 0});
+            arr.splice(0, 2);
 
-                arr.splice(0,2)
+            io.emit("find", { allPlayers: playingArray });
+        }
+    });
+    //ruch gracza
 
-                io.emit("find",{allPlayers:playingArray})
+    socket.on("playing", (e) => {
 
-            }
+        const game = playingArray.find(
+            (obj) => obj.p1.p1name === e.name || obj.p2.p2name === e.name
+        );
+        if (!game) return;
 
+        if (e.value === "X" && game.p1.p1name === e.name) {
+            game.p1.p1move = e.id;
+            game.sum++;
+        }
+        else if (e.value === "O" && game.p2.p2name === e.name) {
+            game.p2.p2move = e.id;
+            game.sum++;
         }
 
-    })
+        io.emit("playing", {allPlayers:playingArray});
 
-    socket.on("playing",(e)=>{
-        if(e.value=="X"){
-            let objToChange=playingArray.find(obj=>obj.p1.p1name===e.name)
+    });
 
-            objToChange.p1.p1move=e.id
-            objToChange.sum++
-        }
-        else if(e.value=="O"){
-            let objToChange=playingArray.find(obj=>obj.p2.p2name===e.name)
+    socket.on("gameOver", (e) => {
+        playingArray = playingArray.filter(
+            (obj) => obj.p1.p1name !== e.name && obj.p2.p2name !== e.name
+        );
 
-            objToChange.p2.p2move=e.id
-            objToChange.sum++
-        }
+        arr = arr.filter((n) => n !== e.name);
 
-        io.emit("playing",{allPlayers:playingArray})
+        io.emit("find", { allPlayers: playingArray });
+    });
+    //gracz wychodzi bez "gameover"
 
-    })
+    socket.on("disconnect", () => {
+        const leaver = socket.playerName;
+        if (!leaver) return;
 
-    socket.on("gameOver",(e)=>{
-        playingArray=playingArray.filter(obj=>obj.p1.p1name!==e.name)
-        console.log(playingArray)
-        console.log("lol")
-    })
-
-
-})
-
-
-
-
-app.get("/",(req,res)=>{
-    return res.sendFile("index.html")
-})
-
-server.listen(3000,()=>{
-    console.log("port connected to 3000")
-})
+        arr = arr.filter((n) => n !== leaver);
+        playingArray = playingArray.filter(
+            (obj) => obj.p1.p1name !== leaver && obj.p2.p2name !== leaver
+          );
+      
+          io.emit("find", { allPlayers: playingArray });
+        });
+      });
+      app.get("/", (req, res) => res.sendFile("index.html"));
+      server.listen(3000, () => console.log("Server on :3000"));
