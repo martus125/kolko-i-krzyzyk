@@ -7,7 +7,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.resolve("")));
+app.use(express.static(__dirname));
+
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "index.html"));
+  });
 
 let arr = [];
 let playingArray = [];
@@ -21,6 +25,7 @@ io.on("connection", (socket) => {
         if (!e.name) return;
 
       socket.playerName = e.name;
+      socket.join(e.name);
         arr.push(e.name);
 
         if (arr.length >= 2){
@@ -54,6 +59,18 @@ io.on("connection", (socket) => {
 
         io.emit("playing", {allPlayers:playingArray});
 
+    });
+
+    socket.on("chatMessage", ({name, text }) => {
+        const game = playingArray.find(
+            obj => obj.p1.p1name === name || obj.p2.p2name === name
+        );
+        if (!game) return;
+
+        const payload = { from: name, text };
+
+        io.to(game.p1.p1name).emit("chatMessage", payload);
+        io.to(game.p2.p2name).emit("chatMessage", payload);
     });
 
     socket.on("gameOver", (e) => {
